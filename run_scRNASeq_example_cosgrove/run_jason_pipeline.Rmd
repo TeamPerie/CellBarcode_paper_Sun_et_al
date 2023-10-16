@@ -1,0 +1,151 @@
+---
+title: "Preprocess Jason scRNASeq 3' barcode sequencing"
+author: "Wenjie Sun"
+date: "2023/2/8"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+    theme: united 
+    fig_caption: true
+    highlight: textmate
+    keep_md: false
+always_allow_html: yes
+---
+
+```{r echo=F}
+library(knitr)
+library(devtools)
+library(Seurat)
+opts_chunk$set(echo=T, TOC=T)
+```
+
+```{r}
+# library(CellBarcode)
+load_all("~/projects/Barcode_analysis_package/CellBarcode-master")
+```
+
+# Quick check the reads infromation
+
+The data used here is refering to the figure1 in Jason's paper.
+
+https://github.com/TeamPerie/Cosgrove-et-al-2022/tree/main/Figure1/RNA_BC_PREPROCESSING 
+
+```{r}
+s1_file = c("./data/KDI_2015730_2023-01-31_14-58-15/L438T02/L438T02.R1.fastq.gz", "./data/KDI_2015730_2023-01-31_14-58-15/L438T02/L438T02.R2.fastq.gz")
+
+bc_seq_qc(s1_file) %>% bc_plot_seqQc()
+```
+
+# Preprocess
+
+```{r, eval=F}
+t_start = Sys.time()
+bc_obj1 = bc_extract_10X_fastq(s1_file[1], s1_file[2], 
+    patternCellBarcode = "(.{16})",
+    patternUMI = ".{16}(.{12})",
+    patternBarcode = "CGAAGTATCAAG(.+)CCGTAGCAAG"
+)
+write_rds(bc_obj1, "./tmp/L438T02.rds")
+```
+
+## All possible cells
+
+```{r, warning=FALSE}
+read_rds("./tmp/L438T02.rds") -> bc_obj1
+
+bc_plot_count(bc_obj1, useClean=F)
+bc_obj = bc_cure_umi(bc_obj1, depth = 3, isUniqueUMI = T)
+bc_plot_count(bc_obj)
+bc_obj = bc_cure_depth(bc_obj, depth = 2)
+bc_plot_count(bc_obj)
+
+d = bc_2dt(bc_obj)
+d$sample_name %>% unique %>% length
+doublets = d[, .N, by = .(sample_name)][N > 1]
+nrow(doublets)
+d = d[!(sample_name %in% doublets$sample_name)]
+
+d$barcode_seq %>% unique %>% length
+
+d[, .N, by = barcode_seq][order(N, decreasing = T)][1:20, ]
+```
+
+## Benchmark
+
+```{r, warning=FALSE}
+read_rds("./tmp/L438T02.rds") -> bc_obj1
+# read_rds("./data/V671R01/V671R01.rds") -> bc_obj1
+# rownames(sc_obj1@meta.data) %>% sub("-1", "", .) -> cell_names
+# cell_names = intersect(cell_names, bc_names(bc_obj1))
+# bc_plot_count(bc_obj1, useClean=F)
+# bc_obj1 = bc_subset(bc_obj1, sample = cell_names)
+
+## dominant barcodes percentage
+d = bc_obj1@messyBc
+d_plot = lapply(d, function(x) {
+    y = x[, .(barcode_seq = barcode_seq[which.max(count)], count = count[which.max(count)], total_count = sum(count)), by = .(umi_seq)]
+    data.table(
+        barcode_per_cell_before = length(unique(x$barcode_seq)),
+        barcode_per_cell_after = length(unique(y$barcode_seq)),
+        dominant_percent = sum(y$count) / sum(y$total_count)
+        )
+}) %>% rbindlist(idcol = "cell_barcode") %>% unique
+
+
+ggplot(d_plot) + aes(y = barcode_per_cell_before, x = dominant_percent * 100) +
+    geom_point(alpha = 0.5) + theme_bw() + labs(y = "Barcode per cell", x = "Dominant barcode %")
+
+d_plot2 = d_plot[, c(2, 3)] %>% melt(variable.name = "filtering", value.name = "barcode_per_cell")
+d_plot2$filtering %<>% revalue(c("barcode_per_cell_before" = "Before", "barcode_per_cell_after" = "After"))
+ggplot(d_plot2) + aes(x = filtering, y = barcode_per_cell) + 
+    geom_violin() +
+    geom_point(position = position_jitter(w = 0.1, h = 0), alpha = 0.01) + 
+    theme_bw() + labs(x = "Unique UMI filter", y = "Barcode per cell") + scale_y_log10()
+
+
+bc_plot_count(bc_obj1, useClean=F)
+d_plot = lapply(1:7, function(i) {
+    bc_obj = bc_cure_umi(bc_obj1, depth = i, isUniqueUMI = T)
+    d = bc_2dt(bc_obj)
+    d = d[, .(barcode_seq = unique(barcode_seq)), by = sample_name][, .N, by = sample_name]
+    d$filter = i
+    d
+}) %>% rbindlist
+
+d_plot_plus = d_plot[, .N, by = filter]
+a = 200
+b = 150
+ggplot(d_plot) + aes(x = factor(filter), y = N) + 
+    geom_violin() +
+    geom_point(position = position_jitter(w = 0.3, h = 0), alpha = 0.2) +
+    geom_line(data = d_plot_plus, aes(x = filter, y = (N - a) / b), color = "red") +
+    geom_point(data = d_plot_plus, aes(x = filter, y = (N - a) / b), color = "red") +
+    scale_y_continuous( name = 'Barcodes per cell', sec.axis = sec_axis(~ (. * b + a),name = "Cell number"))+
+    labs(x = "UMI read count") + theme_bw()
+
+bc_obj = bc_cure_umi(bc_obj1, depth = 2, isUniqueUMI = T)
+
+d_plot = lapply(1:5, function(i) {
+    bc_obj = bc_cure_depth(bc_obj, depth = i)
+    d = bc_2dt(bc_obj)
+    d = d[, .(barcode_seq = unique(barcode_seq)), by = sample_name][, .N, by = sample_name]
+    d$filter = i
+    d
+}) %>% rbindlist
+
+d_plot_plus = d_plot[N == 1, .N, by = filter]
+d_plot_plus = d_plot[, .N, by = filter]
+a = -200
+b = 200
+ggplot(d_plot) + aes(x = factor(filter), y = N) + 
+    geom_violin() +
+    geom_point(position = position_jitter(w = 0.3, h = 0), alpha = 0.2) +
+    geom_line(data = d_plot_plus, aes(x = filter, y = ((N - a) / b)), color = "red") +
+    geom_point(data = d_plot_plus, aes(x = filter, y = ((N - a) / b)), color = "red") +
+    scale_y_continuous(name = 'Barcodes per cell', sec.axis = sec_axis(~ (. * b + a), name = "Cell has \n Unique barcode")) +
+    labs(x = "UMI count") + theme_bw()
+```
+

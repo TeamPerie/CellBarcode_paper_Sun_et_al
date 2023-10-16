@@ -1,0 +1,182 @@
+---
+title: "scRNASeq lenti-virus barcode Celine dataset"
+author: "Wenjie Sun"
+output:
+  word_document:
+    toc: yes
+    fig_caption: true
+    df_print: paged
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+    theme: simplex
+    fig_caption: true
+    highlight: textmate
+    keep_md: false
+  pdf_document:
+    toc: yes
+    df_print: paged
+    template: eisvogel
+    highlight: textmate
+always_allow_html: yes
+---
+
+```{r echo=F}
+library(knitr)
+opts_chunk$set(echo=T, TOC=T)
+```
+
+```{r}
+library(devtools)
+load_all("~/projects/Barcode_analysis_package/CellBarcode-master")
+```
+
+## Preprocess by samtools get unmaped reads
+
+```{bash, eval=F}
+source ~/.bashrc
+module load samtools
+samtools view -f 4 ../data/celine_data/bam/MM468_chemonaive.bam > ./tmp/celine_scRNASeq_MM468_chemonaive_unmap.sam
+```
+
+## Process the sam file, get lineage-barcode, UMI, cell-barcode
+
+```{r}
+sam_file = "./tmp/celine_scRNASeq_MM468_chemonaive_unmap.sam"
+d_chemonaive = bc_extract_10X_sam(
+   sam = sam_file,
+   pattern = "AGATCAG(.{21})TGTGGTAT",
+   cell_barcode_tag = "CR",
+   umi_tag = "UR"
+)
+write_rds(d_chemonaive, "./tmp/celine_scRNASeq_MM468_chemonaive_unmap.rds")
+```
+
+## No Filter 
+
+```{r}
+read_rds("./tmp/celine_scRNASeq_MM468_chemonaive_unmap.rds") -> d_chemonaive
+
+## d_chemonaive
+
+## filter by reads per UMI: no filter
+d_chemonaive = bc_cure_umi(d_chemonaive, depth= 0, doFish=F, isUniqueUMI=F)
+bc_plot_count(d_chemonaive)
+d_chemonaive_df = bc_2df(d_chemonaive)
+d_chemonaive_df
+
+write_tsv(d_chemonaive_df, "tmp/celine_chemonaive.tsv")
+```
+
+## Test the filtering effects
+
+```{r}
+read_rds("./tmp/celine_scRNASeq_MM468_chemonaive_unmap.rds") -> bc_obj1
+ref = fread("../../data/Libraries/new_lib/Ref_Lib_21bp/LG22_filtered.fa", header=F)[[1]] %>% grep(">", ., invert=T, value=T)
+
+## Dominant barcodes percentage
+d = bc_obj1@messyBc
+d_plot = lapply(d, function(x) {
+    y = x[, .(barcode_seq = barcode_seq[which.max(count)], count = count[which.max(count)], total_count = sum(count)), by = .(umi_seq)]
+    data.table(
+        barcode_per_cell_before = length(unique(x$barcode_seq)),
+        barcode_per_cell_after = length(unique(y$barcode_seq)),
+        dominant_percent = sum(y$count) / sum(y$total_count)
+        )
+}) %>% rbindlist(idcol = "cell_barcode") %>% unique
+
+d_plot2 = d_plot[, c(2, 3)] %>% melt(variable.name = "filtering", value.name = "barcode_per_cell")
+d_plot2$filtering %<>% revalue(c("barcode_per_cell_before" = "Before", "barcode_per_cell_after" = "After"))
+ggplot(d_plot2) + aes(x = filtering, y = barcode_per_cell) + 
+    geom_boxplot() +
+    geom_point(position = position_jitter(w = 0.1, h = 0), alpha = 0.5) + 
+    theme_bw() + labs(x = "Unique UMI filter", y = "Barcode per cell")
+
+## Test UMI depth filtering
+
+bc_plot_count(bc_obj1, useClean=F)
+d_plot = lapply(1:15, function(i) {
+    bc_obj = bc_cure_umi(bc_obj1, depth = i, isUniqueUMI = T)
+    d = bc_2dt(bc_obj)
+    d = d[, .(barcode_seq = unique(barcode_seq)), by = sample_name][, .N, by = sample_name]
+    d$filter = i
+    d
+}) %>% rbindlist
+
+d_plot_plus = d_plot[, .N, by = filter]
+a = -1
+b = 50
+ggplot(d_plot) + aes(x = factor(filter), y = N) + 
+    geom_violin() +
+    geom_point(position = position_jitter(w = 0.1, h = 0), alpha = 0.5) +
+    geom_line(data = d_plot_plus, aes(x = filter, y = (N - a) / b), color = "red") +
+    geom_point(data = d_plot_plus, aes(x = filter, y = (N - a) / b), color = "red") +
+    scale_y_continuous( name = 'Barcodes per cell', sec.axis = sec_axis(~ (. * b + a),name = "Cell number"))+
+    labs(x = "UMI depth") + theme_bw()
+
+bc_obj = bc_cure_umi(bc_obj1, depth = 1, isUniqueUMI = T)
+
+## Test UMI count filtering
+d_plot = lapply(1:5, function(i) {
+    bc_obj = bc_cure_depth(bc_obj, depth = i)
+    d = bc_2dt(bc_obj)
+    d = d[, .(barcode_seq = unique(barcode_seq)), by = sample_name][, .N, by = sample_name]
+    d$filter = i
+    d
+}) %>% rbindlist
+
+d_plot_plus = d_plot[N == 1, .N, by = filter]
+# d_plot_plus = d_plot[, .N, by = filter]
+a = -200
+b = 200
+ggplot(d_plot) + aes(x = factor(filter), y = N) + 
+    geom_violin() +
+    geom_point(position = position_jitter(w = 0.1, h = 0), alpha = 0.5) +
+    geom_line(data = d_plot_plus, aes(x = filter, y = ((N - a) / b)), color = "red") +
+    geom_point(data = d_plot_plus, aes(x = filter, y = ((N - a) / b)), color = "red") +
+    scale_y_continuous(name = 'Barcodes per cell', sec.axis = sec_axis(~ (. * b + a), name = "Cell has \n Unique barcode")) +
+    labs(x = "UMI count") + theme_bw()
+
+## Test reference filtering
+
+d1 = bc_2dt(bc_obj)
+d2 = d1[barcode_seq %in% ref]
+d1$filter = "Before"
+d2$filter = "After"
+d_plot = rbind(d1, d2)
+d_plot = d_plot[, .N, by = .(sample_name, filter)]
+d_plot_plus = d_plot[N == 1, .N, by = filter]
+a = -200
+b = 200
+d_plot$filter %<>% factor(levels = c("Before" = "Before", "After" = "After"))
+ggplot(d_plot) + aes(x = factor(filter), y = N) + 
+    geom_violin() +
+    geom_point(position = position_jitter(w = 0.1, h = 0), alpha = 0.5) +
+    geom_line(data = d_plot_plus, aes(x = filter, y = ((N - a) / b)), color = "red") +
+    geom_point(data = d_plot_plus, aes(x = filter, y = ((N - a) / b)), color = "red") +
+    scale_y_continuous(name = 'Barcodes per cell', sec.axis = sec_axis(~ (. * b + a), name = "Cell has \n Unique barcode")) +
+    labs(x = "UMI count") + theme_bw()
+
+
+d2_res = d2[sample_name %in% d2[, .N, by = .(sample_name)][N == 1, sample_name]]
+v_wenjie = d2_res$barcode_seq %>% unique
+
+## comapre with Anne-Marie's data
+d_anne_marie = fread("./data/GSE164715_metadata_scRNA_MM468.csv")[sample_id == "MM468_initial"][!is.na(lineage_barcode_ref)]
+d_anne_marie$lineage_barcode %<>% paste0("A")
+v_am = d_anne_marie$lineage_barcode %>% unique
+
+setdiff(v_wenjie, v_am) %>% length
+setdiff(v_am, v_wenjie) %>% length
+intersect(v_am, v_wenjie) %>% length
+```
+
+```{r}
+sessionInfo()
+```
+
+
+
+

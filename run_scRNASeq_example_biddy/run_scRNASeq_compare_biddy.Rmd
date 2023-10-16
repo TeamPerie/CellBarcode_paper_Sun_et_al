@@ -1,0 +1,218 @@
+---
+title: "Compare CellTagR CellBarcode"
+author: "Wenjie Sun"
+output:
+  word_document:
+    toc: yes
+    fig_caption: true
+    df_print: paged
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+    theme: simplex
+    fig_caption: true
+    highlight: textmate
+    keep_md: false
+  pdf_document:
+    toc: yes
+    df_print: paged
+    template: eisvogel
+    highlight: textmate
+always_allow_html: yes
+---
+
+```{r echo=F}
+library(knitr)
+opts_chunk$set(echo = FALSE, TOC = T)
+```
+
+```{r}
+theme0 <- theme_bw() + theme(
+    text = element_text(size = 15),
+    line = element_line(size = 1),
+    axis.line = element_line(size = 1),
+    axis.ticks.length = unit(3, units = "mm"),
+    axis.text.x = element_text(
+        margin = margin(t = 2, unit = "mm"),
+        angle = 60, vjust = 1, size = 15, hjust = 1
+    ),
+    axis.text.y = element_text(margin = margin(r = 3, l = 5, unit = "mm")),
+    legend.position = "right",
+)
+theme1 <- theme0 + theme(
+    axis.text.x = element_text(
+        margin = margin(t = 2, unit = "mm"),
+        angle = 0, vjust = 1, size = 12, hjust = 0.5
+    )
+)
+```
+
+```{r}
+library(devtools)
+library(CellTagR)
+library(data.table)
+library(ggplot2)
+library(plyr)
+library(magrittr)
+library(readr)
+library(stringr)
+library(CellBarcode)
+```
+
+# Reference
+
+```{r}
+# Read in the data file that come with the package
+fpath <- system.file("extdata", "v1_whitelist.csv", package = "CellTagR")
+ref_v1 <- fread(fpath)
+```
+
+# CellBarcode
+
+```{r}
+bc_obj <- read_rds("./tmp/hf1.d15.cellbarcode.rds")
+
+meta_d <- bc_meta(bc_obj) %>% data.table()
+meta_before_cell_filter_d <- meta_d
+meta_before_cell_filter_d[, type := "before"]
+
+## remove cells not in cell ranger output
+hf1_d15_cell_barcode_list <- readLines("./tmp/hf1.d15.barcode.txt") %>% sub("-1", "", .)
+bc_obj <- bc_subset(bc_obj, sample = intersect(hf1_d15_cell_barcode_list, bc_names(bc_obj)))
+meta_d <- bc_meta(bc_obj) %>% data.table()
+meta_after_cell_filter_d <- meta_d
+meta_after_cell_filter_d[, type := "after"]
+
+d_plot <- rbind(meta_after_cell_filter_d, meta_before_cell_filter_d)
+d_plot$type %<>% factor(levels = c("before", "after"))
+
+## barcode reads% before and after cell filtering
+# ggplot(d_plot) + aes(x = barcode_read_count / raw_read_count) +
+#     facet_grid(~ type) + geom_histogram()
+
+```
+
+```{r, eval=T}
+## filter by reads per UMI: no filter
+bc_obj <- bc_cure_umi(bc_obj, depth = 0, doFish = F, isUniqueUMI = F)
+bc_count_0 <- bc_2dt(bc_obj)[, .N, by = sample_name]
+bc_count_0$step <- 0
+bc_count_0$group <- "bc"
+
+
+## filter by hamming distance
+bc_obj <- bc_cure_cluster(bc_obj, dist_threshold = 1)
+bc_count_1 <- bc_2dt(bc_obj)[, .N, by = sample_name]
+bc_count_1$step <- 1
+bc_count_1$group <- "bc"
+
+
+## filter by UMI per barcode: >= 2
+bc_obj <- bc_cure_depth(bc_obj, depth = 2)
+bc_count_2 <- bc_2dt(bc_obj)[, .N, by = sample_name]
+bc_count_2$step <- 2
+bc_count_2$group <- "bc"
+
+d_plot = lapply(1:5, function(i) {
+    bc_obj = bc_cure_depth(bc_obj, depth = i)
+    d = bc_2dt(bc_obj)
+    d = d[, .(barcode_seq = unique(barcode_seq)), by = sample_name][, .N, by = sample_name]
+    d$filter = i
+    d
+}) %>% rbindlist
+
+d_plot_plus = d_plot[, .N, by = filter]
+a = -200
+b = 200
+ggplot(d_plot) + aes(x = factor(filter), y = N) + 
+    geom_violin() +
+    geom_point(position = position_jitter(w = 0.1, h = 0), alpha = 0.5) +
+    geom_line(data = d_plot_plus, aes(x = filter, y = ((N - a) / b)), color = "red") +
+    geom_point(data = d_plot_plus, aes(x = filter, y = ((N - a) / b)), color = "red") +
+    scale_y_continuous(name = 'Barcodes per cell', sec.axis = sec_axis(~ (. * b + a), name = "Cell number")) +
+    labs(x = "UMI count") + theme_bw()
+
+
+## filter by reference list
+bc_dt <- bc_2dt(bc_obj)[barcode_seq %in% ref_v1$CellTag]
+bc_count_3 <- bc_dt[, .N, by = sample_name]
+bc_count_3$step <- 3
+bc_count_3$group <- "bc"
+
+write_tsv(bc_dt, "tmp/bc_dt.tsv")
+```
+
+# CellTagR
+
+```{r, eval=T}
+ct_obj <- read_rds("./tmp/hf1.d15.celltagr.rds")
+
+# Generate the sparse count matrix
+ct_obj <- CellTagMatrixCount(celltag.obj = ct_obj, barcodes.file = "./tmp/hf1.d15.barcode.txt")
+
+ct_obj <- CellTagDataForCollapsing(celltag.obj = ct_obj, output.file = "./tmp/collapsing.txt")
+```
+
+```{bash, eval=T}
+./tmp/starcode-1.4 -s --print-clusters ./tmp/collapsing.txt > ./tmp/collapsing_result.txt
+```
+
+```{r}
+# Recount and generate collapsed matrix
+ct_obj <- CellTagDataPostCollapsing(celltag.obj = ct_obj, collapsed.rslt.file = "./tmp/collapsing_result.txt")
+
+
+# Calling binarization
+ct_obj <- SingleCellDataBinarization(ct_obj, 2)
+MetricPlots(ct_obj)
+
+# Read the RDS file and get the object
+dt.mtx.whitelist.path <- system.file("extdata", "v1_whitelist.csv", package = "CellTagR")
+ct_obj <- SingleCellDataWhitelist(ct_obj, dt.mtx.whitelist.path)
+MetricPlots(ct_obj)
+
+# ct_m = ct_obj@binary.mtx
+
+# ct_obj <- MetricBasedFiltering(ct_obj, 20, comparison = "less")
+# ct_obj <- MetricBasedFiltering(ct_obj, 2, comparison = "greater")
+# MetricPlots(ct_obj)
+```
+
+# Compare CellBarcode & CellTagR
+
+```{r}
+ct_m <- ct_obj@whitelisted.count
+ct_dt <- as.matrix(ct_m) %>%
+    melt() %>%
+    data.table() %>%
+    unique()
+names(ct_dt) <- c("sample_name", "barcode_seq", "exist")
+ct_dt$sample_name %<>% sub("-1", "", .)
+ct_dt$barcode_seq %<>% sub("v1.", "", .)
+ct_dt <- ct_dt[exist > 0]
+bc_count_ct <- unique(ct_dt)[, .N, by = sample_name]
+bc_count_ct$step <- 4
+bc_count_ct$group <- "ct"
+
+
+bc_dt = fread("./tmp/bc_dt.tsv")
+merge_dt <- merge(bc_dt, ct_dt[exist > 0], all = T)
+merge_dt[, table(count > 0, exist, useNA = "always")]
+```
+
+## The tags per cell
+
+```{r}
+d_plot <- rbindlist(list(bc_count_0, bc_count_1, bc_count_2, bc_count_3, bc_count_ct))
+ggplot(d_plot) +
+    aes(x = factor(step), y = N, color = group) +
+    geom_boxplot() +
+    geom_jitter(alpha = 0.15) +
+    theme1 +
+    scale_y_log10() +
+    scale_color_manual(values = c("bc" = "black", ct = rgb(249, 37, 34, max = 255)))
+```
+
+

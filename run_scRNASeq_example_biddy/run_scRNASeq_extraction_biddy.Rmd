@@ -1,0 +1,110 @@
+---
+title: "CellBarcode scRNASeq Biddy dataset"
+author: "Wenjie Sun"
+output:
+  word_document:
+    toc: yes
+    fig_caption: true
+    df_print: paged
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+    theme: simplex
+    fig_caption: true
+    highlight: textmate
+    keep_md: false
+  pdf_document:
+    toc: yes
+    df_print: paged
+    template: eisvogel
+    highlight: textmate
+always_allow_html: yes
+---
+
+```{r echo=F}
+library(knitr)
+opts_chunk$set(echo=T, TOC=T)
+```
+
+```{r}
+library(CellBarcode)
+library(CellTagR)
+library(readr)
+```
+
+## Use grep to reduce the search area
+
+```{bash, eval=F}
+source ~/.bashrc
+module load samtools
+#samtools view ../data/biddy_data/hf1.d0.possorted_genome_bam.bam.1 | grep -E "CCGGT.*GAATTC" > ./tmp/hf1_d0_mef.sam
+#samtools view ../data/biddy_data/hf1.d3.possorted_genome_bam.bam.1 | grep -E "CCGGT.*GAATTC" > ./tmp/hf1_d3_mef.sam
+#samtools view ../data/biddy_data/hf1.d6.possorted_genome_bam.bam.1 | grep -E "CCGGT.*GAATTC" > ./tmp/hf1_d6_mef.sam
+#samtools view ../data/biddy_data/hf1.d9.possorted_genome_bam.bam.1 | grep -E "CCGGT.*GAATTC" > ./tmp/hf1_d9_mef.sam
+#samtools view ../data/biddy_data/hf1.d12.possorted_genome_bam.bam.1 | grep -E "CCGGT.*GAATTC" > ./tmp/hf1_d12_mef.sam
+#samtools view ../data/biddy_data/hf1.d15.possorted_genome_bam.bam.1 | grep -E "CCGGT.*GAATTC" > ./tmp/hf1_d15_mef.sam
+#samtools view ../data/biddy_data/hf1.d21.possorted_genome_bam.bam.1 | grep -E "CCGGT.*GAATTC" > ./tmp/hf1_d21_mef.sam
+#samtools view ../data/biddy_data/hf1.d28.possorted_genome_bam.bam.1 | grep -E "CCGGT.*GAATTC" > ./tmp/hf1_d28_mef.sam
+```
+
+## Use CellTagR repo code
+
+```{bash, eval=F}
+source ~/.bashrc
+module load samtools
+
+mkdir -p tmp
+
+bam_day15=../../data/biddy_data/hf1.d15.possorted_genome_bam.bam.1
+
+samtools view -b -f 4 $bam_day15 > ./tmp/hf1.d15.filtered.bam
+samtools view -b  $bam_day15 GFP >> ./tmp/hf1.d15.filtered.bam
+samtools view -b $bam_day15 CellTag.UTR >> ./tmp/hf1.d15.filtered.bam
+samtools view ./tmp/hf1.d15.filtered.bam > ./tmp/hf1.d15.filtered.sam
+```
+
+## Process data by CellTagR
+
+```{r}
+t_start = Sys.time()
+## white list
+# Read in the data file that come with the package
+fpath <- system.file("extdata", "v1_whitelist.csv", package = "CellTagR")
+ref_v1 = fread(fpath)
+
+
+# Set up the CellTag Object
+bam.test.obj <- CellTagObject(object.name = "bam.cell.tag.obj", fastq.bam.directory = "./tmp/hf1.d15.filtered.bam")
+# Extract the CellTag information
+bam.test.obj <- CellTagExtraction(bam.test.obj, celltag.version = "v1")
+head(bam.test.obj@bam.parse.rslt[["v1"]])
+Sys.time() - t_start
+
+write_rds(bam.test.obj, "./tmp/hf1.d15.celltagr.rds")
+```
+
+## Process data by CellBarcode
+
+```{r}
+## cellranger cell barcode
+t_start = Sys.time()
+hf1_d15_cell_barcode_list = readLines("./tmp/hf1.d15.barcode.txt")
+
+## Mef barcode for day 15
+sam_file = "./tmp/hf1.d15.filtered.sam"
+d15_mef = bc_extract_10XscSeq(
+    sam = sam_file,
+    pattern = "GGT([ATCG]{8})GAATTC",
+    cell_barcode_tag = "CR",
+    umi_tag = "UR"
+)
+Sys.time() - t_start
+write_rds(d15_mef, "./tmp/hf1.d15.cellbarcode.rds")
+```
+
+```{r}
+sessionInfo()
+```
+

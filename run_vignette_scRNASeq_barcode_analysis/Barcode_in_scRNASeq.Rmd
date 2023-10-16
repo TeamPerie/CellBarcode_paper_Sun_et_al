@@ -1,0 +1,347 @@
+---
+title: "scRNASeq Barcode data"
+author: 
+  - Wenjie Sun
+date: 
+  '`r format(Sys.time())`'
+package: CellBarcode
+output: 
+  pdf_document
+vignette: >
+  %\VignetteIndexEntry{10X_Barcode}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}  
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  message = FALSE,
+  error = FALSE,
+  warn = FALSE,
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+
+```{r setup}
+library(data.table)
+library(ggplot2)
+library(CellBarcode)
+```
+
+# Introduction
+
+Lineage barcode labeling is
+usually done by adding the lineage barcode sequence to DNA. The sequence can be
+transcripted and thus detected by scRNASeq. Another document, which is about bulk sample barcode analysis, will be very helpful, highly recommend reading that in addition to this one.
+
+This vignette is a tutorial for how to extract lineage barcodes from scRNASeq
+data and do the cleaning of them. It also can be applied to analyze other single-cell sequencing results such as scATACSeq, scDNASeq, as long as the barcodes are sequenced. For the analysis, the input is `fastq` files or the `bam` file.
+
+**Fastq Files**
+
+> The `fastq` files are raw reads. To use it, you need the design of the lineage barcode, cell barcode, and (or) UMI sequence. Given the structure, the CellBarcode will search them. To facilitate detection, the
+> target amplification can be carried out. The target amplification is a PCR
+> process, which uses the barcode-specific primer to amplify the barcode sequence using scRNASeq library. The targeted amplified and normal scRNASeq
+> Data both can be used as input of CellBarcode.
+
+**Bam Files**
+
+> The `bam` file contains the reads with alignment information, in which the cell
+> barcode and UMI sequences have been digested. The CellBarcode search
+> barcode in `bam` file using a regular expression, and find the cell barcodes and(or) UMI sequences by the `bam` tag.
+> In most cases, in the `bam` file, the barcode sequence is not aligned to the
+> reference genome as they are not part of the genome, thus we can do a quick filtering to get the un-mapped reads, as we will demonstrate later, to reduce the running time of barcode
+> searching.
+
+# Extract barcodes from fastq file
+
+## Extract lineage barcode
+
+We use the targeted amplified fastq file derived from [Cosgrove et al.
+2023](https://www.biorxiv.org/content/10.1101/2023.01.24.525166v1) as an example.
+
+```{r}
+s1_file <- c(
+    "../run_scRNASeq_example_cosgrove/data/KDI_2015730_2023-01-31_14-58-15/L438T02/L438T02.R1.fastq.gz", 
+    "../run_scRNASeq_example_cosgrove/data/KDI_2015730_2023-01-31_14-58-15/L438T02/L438T02.R2.fastq.gz")
+
+bc_qc <- bc_seq_qc(s1_file) 
+
+bc_plot_seqQc(bc_qc)
+```
+
+It is a 10X Genomics scRNASeq data with a paired-end sequencing5. 
+
+Read 1 has 28bp, containing 16bp cellular barcode followed by 12bp UMI. In the code, regular expression `(.{16)` defines the 16bp cellular barcode pattern; `.{16}(.{12})` is for the UMI. In the regular expression, `.` means any character, and the number, followed by 16 surrounded by `{}` which tells the repeat number; `()` defines
+the sequences interested and returned as results, outside sequence serves as context
+for defining the target.
+
+Read 2 contains the lineage barcode, which can be identified by the pattern `CGAAGTATCAAG(.+)CCGTAGCAAG`. The `CGAAGTATCAAG` and `CCGTAGCAAG` are constant sequences around barcodes that are defined by `(.+)`. The `+` is quantification similar to `{16}`, indicating the barcode sequence is flexible length at least 1 bp.
+
+The output `bc_obj1` is a `BarcodeObj` object, using which we have provided functions to check quality, filter, and export results. The `BarcodeObj` has the same data structure as the one generated in bulk analysis. The difference is that in the scRNASeq barcode analysis, the sample name is the
+cell barcode. Consequently, the `BarcodeObj` contains only one scRNASeq sample.
+
+```{r}
+bc_obj1 = bc_extract_sc_fastq(
+    fq1 = s1_file[1],                               ## fastq file 1
+    fq2 = s1_file[2],                               ## fastq file 2
+    patternCellBarcode = "(.{16})",                 ## Cell barcode pattern
+    patternUMI = ".{16}(.{12})",                    ## UMI pattern
+    patternBarcode = "CGAAGTATCAAG(.+)CCGTAGCAAG"   ## Lineage barcode pattern
+)
+```
+
+### More about the `pattern`
+
+The pattern is a regular expression, followed by which CellBarcode finds the lineage barcode, cell barcode, and (or) UMI. The following are brief descriptions of syntax, just to help you work with simple cases without leaving this document.
+
+In the pattern, we define the barcode backbone and label the barcode
+sequence by bracket `()`.
+
+For example, the pattern `ATCG(.{21})TCGG` tells the barcode is surrounded by
+a constant sequence of `ATCG`, and `TCGG`. Following are some examples to define
+the constant region and barcode sequence.
+
+**Example 1**
+
+`ATCG(.{21})`
+
+21 bases barcode after a constant sequence of "ATCG".
+
+**Example 2**
+
+`(.{15})TCGA`
+
+15 bases barcode before a constant sequence of "TCGA".
+
+**Example 3**
+
+`ATCG(.*)TCGA`
+
+A barcode with a flexible length located between the constant regions "ATCG" and "TCGA".
+
+**Need more help**: For a more complex barcode pattern, please ask the package
+author.
+
+
+
+## Check the quality of extracted barcodes
+
+The `bc_plot_count` tells you some numbers of extracted barcodes in the `bc_obj1`.
+
+1. reads count (with barcode) versus the total reads
+
+2. reads count per UMI
+
+3. UMI count per barcode
+
+4. barcode count per sample
+
+```{r}
+bc_plot_count(bc_obj1, useClean=F)
+```
+
+You also can use `bc_meta` to check the metadata useful for quality control in the `bc_obj1`.
+
+```{r}
+head(bc_meta(bc_obj1))
+```
+
+
+
+## Filter barcode
+
+We filter the barcode by UMI reads count, which is a reads number with the same UMI-barcode sequence. A higher UMI reads count shows more confidence in a barcode sequence.
+
+For previous barcode number distribution, we can see a UMI can link to multiple barcodes. Ideally, each UMI should link to only
+one barcode sequence when UMI diversity is far higher than the barcode. In the unique UMI case, the `isUniqueUMI` parameter should be set to keep the most frequent barcode for each UMI.
+
+
+```{r}
+## Count the UMI with at least 3 reads
+bc_obj = bc_cure_umi(bc_obj1, depth = 3, isUniqueUMI = T)
+```
+
+Next, we filter the barcode by the UMI count which is the UMI
+number a barcode sequence has.
+
+
+```{r}
+## Keep the barcodes with at least 2 UMIs
+bc_obj = bc_cure_depth(bc_obj, depth = 2)
+```
+
+We can export the barcode sequence to other R data types such as `data.frame`, `data.table` or `data.matrix`.
+
+```{r}
+## export data.frame
+d <- bc_2df(bc_obj)
+head(d)
+
+## export data.table
+d <- bc_2df(bc_obj)
+head(d)
+
+## export data.matrix
+d <- bc_2matrix(bc_obj)
+d[1:5, 1:3]
+```
+
+## Explore the threshold
+
+We explore how the UMI read count threshold and UMI count threshold affect the result
+by trying a range of values.
+
+### UMI read count threshold
+
+Assuming the UMI should be unique, the result shows that the UMI read count threshold of 2 is enough good, which keeps most
+of the UMI with a unique barcode. The far more stringent threshold leads to little improvement and may cause the loss of some barcodes.
+
+```{r}
+## Try the UMI read count threshold from 1 to 7
+d_plot = lapply(1:7, function(i) {
+    bc_obj = bc_cure_umi(bc_obj1, depth = i, isUniqueUMI = T)
+    d = bc_2dt(bc_obj)
+    d = d[, .(barcode_seq = unique(barcode_seq)), by = sample_name][, .N, by = sample_name]
+    d$filter = i
+    d
+}) 
+d_plot <- rbindlist(d_plot)
+
+d_plot_plus = d_plot[, .N, by = filter]
+## Scale the left and right y-axis
+a = 200
+b = 150
+
+## Plot the result
+ggplot(d_plot) + aes(x = factor(filter), y = N) + 
+    geom_violin() +
+    geom_point(position = position_jitter(w = 0.3, h = 0), alpha = 0.2) +
+    geom_line(data = d_plot_plus, aes(x = filter, y = (N - a) / b), color = "red") +
+    geom_point(data = d_plot_plus, aes(x = filter, y = (N - a) / b), color = "red") +
+    scale_y_continuous(
+        name = 'Barcodes per cell', 
+        sec.axis = sec_axis(~ (. * b + a),name = "Cell number")) +
+    labs(x = "UMI read count") + theme_bw()
+```
+
+### UMI count threshold
+
+By fixing the UMI read count threshold to 2, we explore the effect of the UMI count threshold. 
+
+For the dataset, we demonstrated here, each cell only has one copy of the unedited VDJ sequence, which guarantees a unique barcode per cell. Using this criterion we test the UMI count threshold.
+
+We can see that a UMI count threshold of 2 ensures that the majority of cells possess a unique barcode. Increasing the threshold further provides minimal benefits and may result in the loss of certain barcodes.
+
+```{r}
+## Fix the UMI read count threshold to 2
+bc_obj = bc_cure_umi(bc_obj1, depth = 2, isUniqueUMI = T)
+
+## Try the UMI count threshold from 1 to 5
+d_plot = lapply(1:5, function(i) {
+    bc_obj = bc_cure_depth(bc_obj, depth = i)
+    d = bc_2dt(bc_obj)
+    d = d[, .(barcode_seq = unique(barcode_seq)), by = sample_name][, .N, by = sample_name]
+    d$filter = i
+    d
+}) 
+
+d_plot <- rbindlist(d_plot)
+
+d_plot_plus = d_plot[N == 1, .N, by = filter]
+d_plot_plus = d_plot[, .N, by = filter]
+## Scale the left and right y-axis
+a = -200
+b = 200
+
+## Plot the result
+ggplot(d_plot) + aes(x = factor(filter), y = N) + 
+    geom_violin() +
+    geom_point(position = position_jitter(w = 0.3, h = 0), alpha = 0.2) +
+    geom_line(data = d_plot_plus, aes(x = filter, y = ((N - a) / b)), color = "red") +
+    geom_point(data = d_plot_plus, aes(x = filter, y = ((N - a) / b)), color = "red") +
+    scale_y_continuous(
+        name = 'Barcodes per cell', 
+        sec.axis = sec_axis(~ (. * b + a), 
+        name = "Cell has \n Unique barcode")) +
+    labs(x = "UMI count") + theme_bw()
+```
+
+# Extract lineage barcodes from a sam/bam file
+
+## Preprocess sam/bam file
+
+A sam/bam file has RNA sequences, cell barcode, and UMI. We need to get the barcode in the RNA sequence
+together with the Cell barcode and UMI by tags.
+
+For 10X scRNASeq usually, you can find the bam file in in following location of the CellRanger output:
+
+`CellRanger Output fold/outs/possorted_genome_bam.bam`
+
+If you use a customized pipeline, you need to know the answer or who to ask for assistance.
+
+**Why preprocess**. We do filtering with simple criteria, which make the input file smaller, to reduce the running
+time.
+
+**Example: get the sam/bam file only containing un-mapped reads**
+
+Using unmapped reads can significantly reduce the running time of the barcode extraction procedure, especially when barcodes do not map to the reference genome sequence. By running the following code, we obtain a `scRNASeq_10X.sam` file that contains only the unmapped reads.
+
+```{bash, eval=F}
+samtools view -f 4 possorted_genome_bam.bam > scRNASeq_10X.sam
+```
+
+## Extract lineage barcode
+
+The following example extracts the lineage barcode together with the cellular barcode and UMI information.
+
+The parameters:
+
+- `sam`: The location of the sam/bam file.
+
+- `pattern`: A regular expression describing lineage barcode.
+  
+- `cell_barcode_tag`: The cell barcode tag in the sam/bam file, the default is
+  "CR" in the Cell Ranger output.
+  
+- `umi_tag`: The UMI field tag in the sam/bam file, the default is "UR" in the Cell
+  Ranger output.
+
+```{r}
+sam_file <- system.file("extdata", "scRNASeq_10X.sam", package = "CellBarcode")
+
+d = CellBarcode::bc_extract_sc_sam(
+   sam = sam_file,
+   pattern = "AGATCAG(.*)TGTGGTA",
+   cell_barcode_tag = "CR",
+   umi_tag = "UR"
+)
+```
+
+The output is a `BarcodeObj`, which is the same as the object generated in the previous case.
+
+## Cleaning lineage barcode
+
+This section will give you a very short example of cleaning the lineage barcodes because we did that in the previous example.
+
+Please attention that the dataset used in this section is a subset of a
+dataset with the read count lower than a real one. So the filtering applied
+here is for demonstration purposes.
+
+```{r}
+## Filter UMI reads count, keep the UMI with at least 2 reads
+d_sub <- bc_cure_umi(d, depth = 1) 
+
+## Filter the UMI count, here no UMI count filter is applied
+d_sub <- bc_cure_depth(d_sub, depth = 1)
+
+head(bc_2df(d_sub))
+```
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
