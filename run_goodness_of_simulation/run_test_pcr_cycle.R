@@ -70,9 +70,9 @@ total_pcr_cycle = pre_amp_pcr_cycles + 20
 g_l = lapply(d_l, function(x) {
     ggplot(x, aes(x = log10(count + runif(length(count))), color = barcode_seq %in% ref$barcode_seq)) +
         geom_histogram(bins = 20, fill = "skyblue", color = "black", alpha = 0.7, boundary = 0) +
-        geom_rug(linewidth = 0.5, alpha = 0.5, aes(color = barcode_seq %in% ref$barcode_seq)) +  
+        geom_rug(linewidth = 0.5, alpha = 0.5, aes(color = barcode_seq %in% ref$barcode_seq), length = unit(0.08, "npc")) +  
         labs(x = "log10 sequence count") +
-        theme_bw() + scale_color_manual(values = c("black", "red")) + guides(color = 'none')
+        theme_bw() + scale_color_manual(values = c("black", "red")) + guides(color = 'none') + ylim(-10, NA)
 
 })
 
@@ -107,9 +107,11 @@ total_pcr_cycle = pre_amp_pcr_cycles + 20
 g_l = lapply(d_l, function(x) {
     ggplot(x, aes(x = log10(count + runif(length(count))), color = barcode_seq %in% ref$barcode_seq)) +
         geom_histogram(bins = 20, fill = "skyblue", color = "black", alpha = 0.7, boundary = 0) +
-        geom_rug(linewidth = 0.5, alpha = 0.5, aes(color = barcode_seq %in% ref$barcode_seq)) +  
+        geom_rug(linewidth = 0.5, alpha = 0.5, aes(color = barcode_seq %in% ref$barcode_seq), length = unit(0.08, "npc")) +  
         labs(x = "log10 sequence count") +
-        theme_bw() + scale_color_manual(values = c("black", "red")) + guides(color = 'none')
+        theme_bw() + scale_color_manual(values = c("black", "red")) + guides(color = 'none') + ylim(-10, NA)
+
+
 })
 
 
