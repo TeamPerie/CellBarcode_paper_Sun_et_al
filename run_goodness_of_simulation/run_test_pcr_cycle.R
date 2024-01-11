@@ -121,8 +121,35 @@ egg::ggarrange(plots = g_l, nrow = 1)
 f1 = "./tmp/simu_mef_6250.fq"
 f2 = "../../data/5290/5290_4_BCM_12500_mef_mixb_TAACTGC_S8_R1_001.fastq.gz"
 
-x_qc = bc_seq_qc(c(f1, f2))
-bc_plot_seqQc(x_qc)
+x = bc_seq_qc(c(f1, f2), sample_name = c("Simulation", "Experiment"))
+bc_plot_seqQc(x)
+
+## base percentage line plot
+d <- lapply(
+    seq_along(x@qc_list),
+    function(i) {
+        data.table(x@qc_list[[i]]@base_freq_per_cycle, fileName = names(x@qc_list)[i]) 
+    }) %>% rbindlist()
+
+d[, base_num := sum(Count), by = .(Cycle, fileName)]
+d[, base_percent := Count / base_num, by = .(Base, Cycle, fileName)]
+
+d_stat = d[, .(Base = Base[which.max(base_percent)], base_percent = max(base_percent)), by = .(Cycle, fileName)]
+
+m = dcast(d_stat, Cycle ~ fileName, value.var = "base_percent") 
+cor.test(m[[2]], m[[3]])
+
+ggplot(d, aes(Cycle, fileName, fill = Base, alpha = base_percent)) + 
+    geom_tile(color = "black") + labs(y = "Sample Name") + theme_bw()
+
+ggplot(d, aes(Cycle, base_percent, color = Base)) + 
+    geom_line() + facet_wrap(~fileName, ncol = 1) + theme_classic()
+
+ggplot(d, aes(Cycle, base_percent, fill = Base)) + 
+    geom_bar(stat = "identity") + facet_wrap(~ fileName, ncol = 1) + theme_classic()
+
+ggsave("./tmp/fig_base_percent.pdf", width = 7, height = 4)
+
 
 bo = bc_extract(c(f1, f2), pattern, pattern_type = c("UMI" = 1, "barcode" = 2))
 

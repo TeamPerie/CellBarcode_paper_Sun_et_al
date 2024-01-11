@@ -92,8 +92,9 @@ symnum.args <- list(cutpoints = c(0, 0.0001, 0.001, 0.01,
 ggplot(d_auc_sub) + aes(x = simu_name, y = aucpr) + geom_boxplot() + theme0 +
     scale_x_discrete(limits = i_level_simu_name) +
     labs(y = "P-R AUC") + lims(y = c(0, 1.5)) + 
-    stat_compare_means(method = "wilcox.test", comparisons = comparisons_l, na.rm = T, hide.ns = T, symnum.args = symnum.args)
-ggsave("./tmp/fig_aucpr_no_umi_depth.pdf")
+    stat_compare_means(method = "wilcox.test", comparisons = comparisons_l, na.rm = T, hide.ns = F)
+write_tsv(d_auc_sub, "./tmp/Figure_3C.tsv")
+ggsave("./tmp/Figure_3C.pdf")
 
 #' # Resolusion index
 d_count_true_barcode = fread("tmp/table_count_true_barcode_depth.tsv")
@@ -131,7 +132,7 @@ ggplot(d_plot_tf) + aes(x = simu_name, y = value) +
     theme0 + facet_grid(pr ~ .) +
     scale_x_discrete(limits = i_level_simu_name)
 
-#' ## Apply the threshold of 0.00001 of left reads
+#' ## Apply the threshold of 0.001 of left reads
 # NOTE: input
 d = fread("./tmp/table_no_umi_p001_threshold_predict_rate_depth.tsv")
 
@@ -150,8 +151,9 @@ ggplot(d_plot_pr) + aes(x = simu_name, y = value) +
     geom_boxplot() +
     theme0 + facet_grid(pr ~ .) +
     scale_x_discrete(limits = i_level_simu_name) +
-    stat_compare_means(method = "wilcox.test", comparisons = comparisons_l, na.rm = T, hide.ns = T, symnum.args = symnum.args)
-ggsave("./tmp/fig_pr_no_umi_depth_more.pdf")
+    stat_compare_means(method = "wilcox.test", comparisons = comparisons_l, na.rm = T, hide.ns = F)
+write_tsv(d_plot_pr, "./tmp/Figure_3B.tsv")
+ggsave("./tmp/Figure_3B.pdf")
 
 
 
@@ -159,6 +161,31 @@ ggplot(d_plot_tf) + aes(x = simu_name, y = value) +
     geom_boxplot() +
     theme0 + facet_grid(pr ~ .) +
     scale_x_discrete(limits = i_level_simu_name)
+
+#' ## Apply the threshold of 0.0001 of left reads
+# NOTE: input
+d = fread("./tmp/table_no_umi_p0001_threshold_predict_rate_depth.tsv")
+
+# ggplot(d) + aes(x = tpr, y = fpr, label = simu_name) + geom_point() +
+# geom_label_repel(alpha = 0.5)
+d_plot_pr = melt(d, id.vars = "simu_name", measure.vars=c("pre", "rec"), variable.name = "pr", value.name = "value") 
+d_plot_tf = melt(d, id.vars = "simu_name", measure.vars=c("tpr", "fpr"), variable.name = "pr", value.name = "value") 
+
+ggplot(d_plot_pr) + aes(x = simu_name, y = value, fill = factor(pr)) + 
+    geom_boxplot() + theme0 +
+    scale_x_discrete(limits = i_level_simu_name)
+
+#+ fig.height=6
+d_plot_pr = d_plot_pr[simu_name %in% i_level_simu_name]
+ggplot(d_plot_pr) + aes(x = simu_name, y = value) + 
+    geom_boxplot() +
+    theme0 + facet_grid(pr ~ .) +
+    scale_x_discrete(limits = i_level_simu_name) +
+    stat_compare_means(method = "wilcox.test", comparisons = comparisons_l, na.rm = T, hide.ns = F)
+write_tsv(d_plot_pr, "./tmp/Figure_3A.tsv")
+ggsave("./tmp/Figure_3A.pdf")
+
+
 
 #' ## Merge threshold
 # d1 = fread("./tmp/table_no_umi_auto_threshold_predict_rate_depth.tsv")[, resolution := "T auto"]

@@ -36,14 +36,32 @@ u_f4 = "../../data/VDJ_mammry_gland_meghan_UMI/noUMI_m9250_P0_Lum_Rep2/L412R11.R
 f_v1 = c(u_f1, u_f2)
 f_v2 = c(u_f3, u_f4)
 
-bc_qc = bc_seq_qc(c(f_v1[2], f_v2[2]))
-bc_plot_seqQc(bc_qc)
-bc_plot_seqQc(bc_qc[1])
-bc_plot_seqQc(bc_qc[2])
+#' # QC plot
+x = bc_seq_qc(c(f_v1[2], f_v2[2]), sample_name = c("UMI", "noUMI"))
 
-bc_qc = bc_seq_qc(f_v2)
-bc_plot_seqQc(bc_qc)
+## base percentage line plot
+d <- lapply(
+    seq_along(x@qc_list),
+    function(i) {
+        data.table(x@qc_list[[i]]@base_freq_per_cycle, fileName = names(x@qc_list)[i]) 
+    }) %>% rbindlist()
 
+d[, base_num := sum(Count), by = .(Cycle, fileName)]
+d[, base_percent := Count / base_num, by = .(Base, Cycle, fileName)]
+
+d_stat = d[, .(Base = Base[which.max(base_percent)], base_percent = max(base_percent)), by = .(Cycle, fileName)]
+
+m = dcast(d_stat, Cycle ~ fileName, value.var = "base_percent") 
+cor.test(m[[2]], m[[3]])
+
+ggplot(d, aes(Cycle, base_percent, fill = Base)) + 
+    geom_bar(stat = "identity") + facet_wrap(~ fileName, ncol = 1) + theme_classic() +
+    labs(y = "Base Percentage", x = "Cycle")
+write_tsv(d, "./tmp/Figure_5C.tsv")
+ggsave("./tmp/Figure_5C.pdf", width = 7, height = 3)
+
+
+#' # Extracting barcode
 
 pattern1 = "(.{16})CCTCGAGGTCATCGAAGTATCAAG(.*)CCGTAGCAAGCTCGAGAGTAGACCTACT"
 pattern2 = "CCTCGAGGTCATCGAAGTATCAAG(.*)CCGTAGCAAGCTCGAGAGTAGACCTACT"
@@ -57,39 +75,54 @@ bc_obj_noumi = bc_extract(f_v2, pattern2, sample_name = c("rep1", "rep2"))
 Sys.time() - time_start
 
 
-#' # Unique UMI
+#' # No Unique UMI
 
-## UMI reads sensitivity test
-d_plot = ldply(1:10, function(x){
+#' ## UMI reads sensitivity test
+d_plot_nouniUMI = ldply(c(1:10, seq(10, 1000, 10)), function(x){
+    y = bc_cure_umi(bc_obj_umi, depth = x, isUniqueUMI = F, doFish= F)
+    y = bc_cure_depth(y, depth = 0)
+    n = bc_2dt(y)[sample_name == "rep2"][count >= 1] %>% nrow
+    c(cutoff = x, n = n)
+})
+
+d_plot_UMI = ldply(c(1:10, seq(10, 1000, 10)), function(x){
     y = bc_cure_umi(bc_obj_umi, depth = x, isUniqueUMI = T, doFish= F)
     y = bc_cure_depth(y, depth = 0)
     n = bc_2dt(y)[sample_name == "rep2"][count >= 1] %>% nrow
     c(cutoff = x, n = n)
 })
-knitr::kable(d_plot)
 
-#' ## Test UMI reads cutoff
-
-d_plot = ldply(1:10, function(x){
-    y = bc_cure_umi(bc_obj_umi, depth = x, isUniqueUMI = T, doFish= F)
-    y = bc_cure_depth(y, depth = 0)
-    n = bc_2dt(y)[sample_name == "rep1"][count >= 1] %>% nrow
+d_plot_noUMI = ldply(c(1:10, seq(10, 1000, 10)), function(x){
+    y = bc_cure_umi(bc_obj_umi, depth = 0, isUniqueUMI = F, doFish= F)
+    y = bc_cure_depth(y, depth = x)
+    n = bc_2dt(y)[sample_name == "rep2"][count >= 1] %>% nrow
     c(cutoff = x, n = n)
 })
 
-knitr::kable(d_plot)
 
-ggplot(d_plot) + aes(x = cutoff, y = n) +
-    geom_bar(stat = "identity") + theme1
+d_plot_nouniUMI$umi = "non unique UMI"
+d_plot_UMI$umi = "unique UMI"
+d_plot_noUMI$umi = "noUMI"
+d_plot = rbind(d_plot_nouniUMI, d_plot_UMI) #, d_plot_noUMI)
+
+ggplot(d_plot) + aes(x = cutoff, y = n, color = umi, shape = umi) +
+    geom_line(stat = "identity", alpha = 1) + theme1 + scale_x_log10() + scale_y_log10() +
+    labs(x = "UMI read count cutoff", y = "Unique barcode count")
+
 
 #' ## UMI filtering
 
 time_start = Sys.time()
-bc_obj_umi = bc_cure_umi(bc_obj_umi, depth = 10, isUniqueUMI = T, doFish= F)
+bc_obj_umi = bc_cure_umi(bc_obj_umi, depth = 100, isUniqueUMI = F, doFish= F)
 Sys.time() - time_start
 bc_plot_mutual(bc_obj_umi, count_marks = 2)
-bc_obj_umi = bc_cure_depth(bc_obj_umi, depth = 0)
+bc_obj_umi = bc_cure_depth(bc_obj_umi, depth = 1)
 bc_2df(bc_obj_umi)
+
+bc_plot_mutual(bc_obj_umi, count_marks = 2)
+write_tsv(bc_2df(bc_obj_umi), "./tmp/Figure_5D.tsv")
+ggsave("./tmp/Figure_5D.pdf", width = 7, height = 3)
+
 
 #' ## No UMI filtering
 
@@ -100,11 +133,13 @@ bc_obj_noumi = bc_cure_depth(bc_obj_noumi, depth = 0, isUpdate = F)
 Sys.time() - time_start
 cutoff_x = bc_auto_cutoff(bc_obj_noumi)
 bc_plot_mutual(bc_obj_noumi, count_marks = cutoff_x)
+write_tsv(bc_2df(bc_obj_noumi), "./tmp/Figure_5C.tsv")
+ggsave("./tmp/Figure_5C.pdf", width = 7, height = 3)
 
 #' ### Auto filtering
 
 bc_obj_noumi = bc_cure_depth(bc_obj_noumi, depth = -1, isUpdate = F)
-bc_plot_mutual(bc_obj_noumi)
+bc_plot_mutual(bc_obj_noumi, count_marks = cutoff_x)
 
 bc_obj_noumi_d = bc_2dt(bc_obj_noumi)
 bc_obj_umi_d = bc_2dt(bc_obj_umi)
@@ -117,9 +152,6 @@ d_plot[is.na(d_plot)] = 0
 d_plot[count.x == 0 | count.y == 0]
 
 ## Y is the umi count
-t_y = sum(d_plot$count.y) * 0.0001
-
-d_plot[count.y < t_y, count.y := 0]
 d_plot = d_plot[count.x > 0 | count.y > 0]
 
 d_plot$count.y = d_plot$count.y / sum(d_plot$count.y)
@@ -129,9 +161,16 @@ ggplot(d_plot) + aes(x = count.x, y = count.y) +
     labs(x = "Reads Count", y = "UMI Count") +
     geom_smooth(method = "lm") + stat_regline_equation()
 
+write_tsv(d_plot, "./tmp/Figure_5F.tsv")
+ggsave("./tmp/Figure_5F.pdf", width = 3, height = 3)
+
+# x: no umi
+# y: umi
 d_plot[count.x != 0 & count.y != 0]
 d_plot[count.x == 0 ]
 d_plot[count.y == 0 ]
+
+write_tsv(d_plot, "./tmp/Figure_5E.tsv")
 
 #' # clone size variance
 (d_plot$count.x * 10000 + 1) %>% log %>% sd

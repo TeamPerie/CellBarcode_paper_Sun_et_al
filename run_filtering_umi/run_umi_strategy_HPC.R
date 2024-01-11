@@ -29,7 +29,7 @@ knitr::opts_chunk$set(fig.width=20, fig.height=12)
 
 #' # Sample info
 # NOTE: input
-sample_info = fread("../run_simulation_no_umi/non_umi_simu_design_matrix.tsv")
+sample_info = fread("../run_simulation_umi/umi_simu_design_matrix.tsv")
 sample_info$simu_id %<>% as.character
 setkey(sample_info, "simu_id")
 

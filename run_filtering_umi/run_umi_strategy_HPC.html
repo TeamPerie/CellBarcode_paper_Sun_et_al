@@ -11,7 +11,7 @@
 
 <meta name="author" content="wsun" />
 
-<meta name="date" content="2023-10-16" />
+<meta name="date" content="2024-01-11" />
 
 <title>run_umi_strategy_HPC.R</title>
 
@@ -352,13 +352,18 @@ display: none;
 
 <h1 class="title toc-ignore">run_umi_strategy_HPC.R</h1>
 <h4 class="author">wsun</h4>
-<h4 class="date">2023-10-16</h4>
+<h4 class="date">2024-01-11</h4>
 
 </div>
 
 
-<pre class="r"><code>library(data.table)
-library(ggplot2)
+<pre class="r"><code>library(data.table)</code></pre>
+<pre><code>## data.table 1.14.8 using 1 threads (see ?getDTthreads).  Latest news: r-datatable.com</code></pre>
+<pre><code>## **********
+## This installation of data.table has not detected OpenMP support. It should still work but in single-threaded mode.
+## This is a Mac. Please read https://mac.r-project.org/openmp/. Please engage with Apple and ask them for support. Check r-datatable.com for updates, and our Mac instructions here: https://github.com/Rdatatable/data.table/wiki/Installation. After several years of many reports of installation problems on Mac, it&#39;s time to gingerly point out that there have been no similar problems on Windows or Linux.
+## **********</code></pre>
+<pre class="r"><code>library(ggplot2)
 library(plyr)
 library(magrittr)
 library(readr)
@@ -381,8 +386,7 @@ theme0 &lt;- theme_bw() + theme(
 <pre><code>## Warning: The `size` argument of `element_line()` is deprecated as of ggplot2 3.4.0.
 ## ℹ Please use the `linewidth` argument instead.
 ## This warning is displayed once every 8 hours.
-## Call `lifecycle::last_lifecycle_warnings()` to see where this warning was
-## generated.</code></pre>
+## Call `lifecycle::last_lifecycle_warnings()` to see where this warning was generated.</code></pre>
 <pre class="r"><code>theme1 = theme0 + theme(
     axis.text.x = element_text( 
         margin = margin(t = 2, unit = &quot;mm&quot;)
@@ -393,7 +397,7 @@ knitr::opts_chunk$set(fig.width=20, fig.height=12) </code></pre>
 <div id="sample-info" class="section level1">
 <h1>Sample info</h1>
 <pre class="r"><code># NOTE: input
-sample_info = fread(&quot;../run_simulation_no_umi/non_umi_simu_design_matrix.tsv&quot;)
+sample_info = fread(&quot;../run_simulation_umi/umi_simu_design_matrix.tsv&quot;)
 sample_info$simu_id %&lt;&gt;% as.character
 setkey(sample_info, &quot;simu_id&quot;)</code></pre>
 </div>
@@ -535,8 +539,7 @@ write_tsv(d_auc, &quot;./tmp/table_auc_umi.tsv&quot;)</code></pre>
 ## bc_auto_cutoff: cleanBc is used.
 ## ------------</code></pre>
 <pre><code>## Warning in cluster.1d.dp(x, k, y, method, estimate.k, &quot;L2&quot;, deparse(substitute(x)), : Input vector x is empty!</code></pre>
-<pre><code>## Warning in min(count[count_sub_i][result$cluster == 2]): no non-missing
-## arguments to min; returning Inf</code></pre>
+<pre><code>## Warning in min(count[count_sub_i][result$cluster == 2]): no non-missing arguments to min; returning Inf</code></pre>
 <pre class="r"><code>bc_obj2 = bc_obj
 
 ## positive

@@ -2,11 +2,15 @@
 title: "scRNASeq Barcode data"
 author: 
   - Wenjie Sun
+header-includes:
+    \usepackage{fvextra}
+    \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
 date: 
   '`r format(Sys.time())`'
 package: CellBarcode
 output: 
-  pdf_document
+    pdf_document:
+        toc: true
 vignette: >
   %\VignetteIndexEntry{10X_Barcode}
   %\VignetteEngine{knitr::rmarkdown}
@@ -34,7 +38,7 @@ library(CellBarcode)
 
 Lineage barcode labeling is
 usually done by adding the lineage barcode sequence to DNA. The sequence can be
-transcripted and thus detected by scRNASeq. Another document, which is about bulk sample barcode analysis, will be very helpful, highly recommend reading that in addition to this one.
+transcripted and thus detected by scRNASeq. There is another vignette, which is about bulk sample barcode analysis, will be very helpful, highly recommend reading that in addition to this one.
 
 This vignette is a tutorial for how to extract lineage barcodes from scRNASeq
 data and do the cleaning of them. It also can be applied to analyze other single-cell sequencing results such as scATACSeq, scDNASeq, as long as the barcodes are sequenced. For the analysis, the input is `fastq` files or the `bam` file.
@@ -72,7 +76,7 @@ bc_qc <- bc_seq_qc(s1_file)
 bc_plot_seqQc(bc_qc)
 ```
 
-It is a 10X Genomics scRNASeq data with a paired-end sequencing5. 
+It is a 10X Genomics scRNASeq data with a paired-end sequencing. 
 
 Read 1 has 28bp, containing 16bp cellular barcode followed by 12bp UMI. In the code, regular expression `(.{16)` defines the 16bp cellular barcode pattern; `.{16}(.{12})` is for the UMI. In the regular expression, `.` means any character, and the number, followed by 16 surrounded by `{}` which tells the repeat number; `()` defines
 the sequences interested and returned as results, outside sequence serves as context

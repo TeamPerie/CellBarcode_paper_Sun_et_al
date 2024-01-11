@@ -1,12 +1,16 @@
 ---
-title: "Analyzing Cellular DNA Barcode with CellBarcode"
+title: "Analyzing Cellular DNA Barcode with CellBarcode and Simulating Barcode Sequencing Data with BarcodeSimulator"
 author: 
-   - Wenjie Sun
-   - Anne-Marie Lyne
+    - Wenjie Sun
+    - Anne-Marie Lyne
+header-includes:
+    \usepackage{fvextra}
+    \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
 date: '`r Sys.Date()`'
 package: CellBarcode
 output: 
-    pdf_document
+    pdf_document:
+        toc: true
 vignette: >
   %\VignetteIndexEntry{UMI_Barcode}
   %\VignetteEngine{knitr::rmarkdown}
@@ -34,9 +38,13 @@ library(plyr)
 
 This document aims to demonstrate bulk cellular barcode sequencing analysis.
 
+There are two part, the part 1 is focusing of using the CellBarcode to analysis bulk cellular barcode data.
+
+The part 2 is about simulating cellular barcode sequencing data.
+
 The instructions for processing scRNASeq barcodes can be found in the document titled "Barcode_in_scRNASeq.pdf".
 
-## About the package
+# Part1: CellBarcode
 
 **What's this package used for?**
 
@@ -58,14 +66,12 @@ The instructions for processing scRNASeq barcodes can be found in the document t
 
   The CPP codes improved the efficiency of the barcode extraction and filtering steps. Additionally, it is recommended to perform sequence quality control using a bash command tool for optimal efficiency.
 
-## About function naming
+**About function naming**
 
 The functions in this package have names with `bc_` as initiation, except few exceptions. We
 hope it can facilitate the syntax auto-complement function of RStudio or IDE-like tools such as VS Code, VIM, and Emacs. By typing `bc_` you get function suggestions, and then you choose the function you need without exactly remembering them.
 
-TODO: The function brain-map
-
-## About the test data set
+**About the test data set**
 
 The test data set in this package can be accessed by
 
@@ -118,7 +124,7 @@ rownames(metadata) = sample_name
 metadata
 ```
 
-# Installation
+## Installation
 
 Install from Bioconductor.
 
@@ -135,7 +141,7 @@ Install the development version from GitHub.
 remotes::install_github("wenjie1991/CellBarcode")
 ```
 
-# A basic workflow
+## A basic workflow
 
 Here is an example of a basic workflow:
 
@@ -148,7 +154,7 @@ library(magrittr)
 # 2000 reads for each file have been sampled for this test dataset
 # extract UMI barcode with regular expression
 bc_obj <- bc_extract(
-  fq_files,  # fastq file
+  fq_files,  
   pattern = "([ACGT]{12})CTCGAGGTCATCGAAGTATC([ACGT]+)CCGTAGCAAGCTCGAGAGTAGACCTACT", 
   pattern_type = c("UMI" = 1, "barcode" = 2),
   sample_name = sample_name,
@@ -175,9 +181,9 @@ head(bc_2matrix(bc_sub))
 ```
 
 
-# Sequence quality control
+## Sequence quality control
 
-## Evaluation
+### Evaluation
 
 In a full analysis starting from fastq files, the first step is to check the
 sequencing quality and filter as required. The `bc_seq_qc` function is for
@@ -214,7 +220,7 @@ class(qc_noFilter[1])
 bc_plot_seqQc(qc_noFilter[1]) 
 ```
 
-## Filtering
+### Filtering
 
 `bc_seq_filter` reads in the sequence data and applies filters, then returns a
 `ShortReadQ` object that contains the filtered sequences. 
@@ -228,8 +234,6 @@ The currently available filter parameters are:
 - N_threshold: maximum number of "N" bases in sequence.
 
 ```{r filter_low_quality_seq}
-# TODO: output the filtering percentage
-# TODO: Trimming
 fq_filter <- bc_seq_filter(
   fq_files,
   min_average_quality = 30,
@@ -240,7 +244,7 @@ fq_filter
 bc_plot_seqQc(bc_seq_qc(fq_filter))
 ```
 
-# Parse reads
+## Parse reads
 
 One of the core applications of this package is parsing the sequences to get
 the barcode (and UMI). Our package uses regular expressions to identify
@@ -312,7 +316,7 @@ variation in the region outside of `match_seq`. Please keep this in mind when
 you use data in `$messyBc` to perform the analysis.
 
 
-## Sequencing without UMI 
+### Sequencing without UMI 
 
 In the following example, only a barcode is extracted.
 
@@ -332,7 +336,7 @@ Here the regular expression matches a constant sequence at the beginning and
 the end and the barcode in `()` matches at least one of any character.
 
 
-## Sequencing with UMI
+### Sequencing with UMI
 
 In the following example, both UMI and barcode are extracted. The regular
 expression is explained above.
@@ -350,7 +354,7 @@ class(bc_obj_umi)
 bc_obj_umi
 ```
 
-## Metadata updated
+### Metadata updated
 
 `bc_extract` added two columns named "row_read_count" and "barcode_read_count"
 to the metadata slot of the returned BarcodeObj object.
@@ -377,7 +381,7 @@ ggplot(d) +
     geom_bar(stat="identity")
 ```
 
-# Data management
+## Data management
 
 Besides, we provide operators to handle the barcodes and samples in `BarcodeObj`
 object. You can easily select one or several samples by their names,
@@ -417,7 +421,7 @@ Select sample by metadata
 bc_subset(bc_obj_umi_sub, sample = rep == "a")
 ```
 
-# Barcode filtering
+## Barcode filtering
 
 Most of the time, it needs PCR and NGS to read out the cellular barcode
 sequences. `bc_extract` will output all barcodes found in the sequences. Some
@@ -446,7 +450,7 @@ In the `bc_cure_*` function family, there are `bc_cure_depth`, `bc_cure_umi,`
 and `bc_cure_cluster`.
 
 
-## Filter UMI-barcode tag
+### Filter UMI-barcode tag
 
 In the case when the UMI is applied, the template sequence is marked by UMI,
 and we use "UMI-barcode tag" to denote a combination of a UMI and a barcode.
@@ -479,7 +483,7 @@ The available arguments of `bc_cure_umi` are:
   less abundant barcodes with the same UMI are obsolete.
 
 
-## Filter by count
+### Filter by count
 
 `bc_cure_depth` performs filtering by reads/UMI count. It can filter the raw
 barcodes in the `messyBc` and create a `cleanBc` slot, or update the
@@ -520,7 +524,7 @@ bc_obj_umi_sub <- bc_cure_depth(bc_obj_umi_sub, depth = 3, isUpdate = TRUE)
 bc_obj_umi_sub
 ```
 
-## Cluster barcode by sequence similarity
+### Cluster barcode by sequence similarity
 
 The sequences with more reads have more chance to be the original templates. In
 contrast, the sequences with few reads are more likely derived from mutations
@@ -560,11 +564,11 @@ following arguments:
 bc_cure_cluster(bc_obj_umi_sub)
 ```
 
-# Barcode count distribution
+## Barcode count distribution
 
 We provide `bc_plot_single`, `bc_plot_mutual,` and `bc_plot_pair` functions to help explore the barcode count distribution for a single sample or between two samples.
 
-## Single sample
+### Single sample
 
 `bc_plot_single` can be used for exploring barcode count distribution sample-wise. It uses the `cleanBc` slot in the BarcodeObj bc_obj_umi_sub.
 
@@ -585,7 +589,7 @@ bc_plot_single(bc_obj_umi_sub_neo, count_marks=10,
     highlight= c("AAGTCCAGTACTATCGTACTA", "AAGTCCAGTACTGTAGCTACTA"))
 ```
 
-## Pairwise
+### Pairwise
 
 `bc_plot_mutual` and `bc_plot_pair` are designed for comparing the barcodes
 between two samples. 
@@ -622,18 +626,18 @@ bc_plot_pair(
 )
 ```
 
-# Miscellaneous
+## Miscellaneous
 
 We provide functions to transform the barcode information in `BarcodeObj` to
 more general R data types.
 
-## Sample names
+### Sample names
 
 ```{r}
 bc_names(bc_obj_umi_sub)
 ```
 
-## Output to data.frame
+### Output to data.frame
 
 `bc_2df` function uses the barcode and count info in the `cleanBc` slot,
 and outputs a data.frame contains: 
@@ -652,7 +656,7 @@ Or if you prefer `data.table`
 bc_2dt(bc_obj_umi_sub)
 ```
 
-## Output to matrix
+### Output to matrix
 
 `bc_2matrix` uses barcode and count information in `cleanBc` slot to create
 reads count or UMI count matrix, with barcodes in rows and samples in columns.
@@ -661,7 +665,7 @@ reads count or UMI count matrix, with barcodes in rows and samples in columns.
 bc_2matrix(bc_obj_umi_sub)
 ```
 
-## More
+### More
 
 You can use:
 
@@ -698,11 +702,160 @@ selected, then output the result in `data.frame` format.
 
 ```{r}
 bc_2df(bc_obj_umi_sub[bc_barcodes(bc_obj_umi_sub)[1], "781_mixa"])
-                  ## 1. Use `bc_barcodes` to pull out all the barcodes in two
-                  ##    samples, and choose the fist barcode.
-       ## 2. Select the barcode got in step 1, and the sample named "781_mixa".
+## 1. Use `bc_barcodes` to pull out all the barcodes in two
+##    samples, and choose the fist barcode.
+## 2. Select the barcode got in step 1, and the sample named "781_mixa".
 ## 3. Convert the BarcodeObj object to a data.frame. 
 ```
+
+# Part 2: Simulating bulk cellular barcode sequencing data
+
+The `CellBarcodeSim` package includes functions to simulate cellular barcode sequencing data with 4 steps:
+
+1. Barcode library simulation.
+2. Barcode labeling, and cell growing.
+3. PCR.
+4. Sequencing.
+
+Followings are simple examples to demostrate how it works, more configuration and updated documents please refer to the github page.
+
+Install the package:
+
+```{r, eval=F}
+install.packages(remotes)
+remotes::install_github("TeamPerie/CellBarcodeSim")
+```
+
+## Example 1: Simulate a Barcode sequencing experiment without UMI
+
+```{r}
+library(CellBarcodeSim)
+```
+
+Load barcode library
+
+```{r}
+barcode_library_file = system.file("data", "random_barcodes.tsv", package = "CellBarcodeSim")
+```
+
+Simulate a Barcode sequencing experiment
+
+```{r}
+## Simulate a Barcode sequencing experiment
+simulate_main(
+    ## Define the barcode library
+    barcode_library_file = barcode_library_file,  
+    ## Define the number of clones
+    clone_n              = 20,      
+    ## Define the clone size distribution
+    clone_size_dist      = "uniform", 
+    ## Define the parameters of the clone size distribution
+    clone_size_dist_par  = list(size_max = 1000, size_min = 1),  
+    ## Define the number of cell cycles
+    cycle                = 30,  
+    ## Define the efficiency of the cell cycle
+    efficiency           = 0.705, 
+    ## Define the error rate of the PCR, mutation per base per cycle
+    error                = 1e-6,  
+    ## Define the number of PCR reads per cell (clone_n)
+    pcr_read_per_cell    = 50,  
+    ## Define the output prefix
+    output_prefix        = "./tmp/barcode_sim" ,  
+    ## Define the NGS profile (refer to ART sequencing simulator manual)
+    ngs_profile          = "MSv1",  
+    ## Define the length of the reads
+    reads_length         = 35,  
+    ## Define the fixed sequence at the 5' end of the reads to be added
+    top_seq              = "AAAAAAAAAAGGGGG",  
+    ## Define the fixed sequence at the 3' end of the reads to be added
+    bottom_seq           = "TTTTTTTTTT",  
+    ## Define the length of the fixed sequence to be added
+    sequence_trunk       = 10, 
+    ## Use the default ART binary file
+    art_bin              = NULL 
+)
+```
+
+## Example 2: Simulating a Barcode sequencing experiment with UMI
+
+Here we generated 20 clones with uniform size distribution from 1 to 200.
+The barcode library is a random barcode library 10 bp long.
+
+After 5 cycle of pre-amplification, 8 bp UMI is added to the 5 end of the barcode.
+The UMI tagging efficiency is 0.05. Then 15 (20 - 5) PCR cycles are performed.
+
+The sequencing is simulated by ART sequencing simulator, with MSv1 sequencing profile.
+
+```{r}
+barcode_library = system.file("data", "random_barcodes.tsv", package = "CellBarcodeSim")
+
+## Simulate a barcode sequencing experiment
+simulate_main_umi(
+    ## Define the barcode library
+    barcode_library_file = barcode_library,
+    ## Define the number of clones
+    clone_n              = 20,
+    ## Define the clone size distribution
+    clone_size_dist      = "uniform",
+    ## Define the parameters of the clone size distribution
+    clone_size_dist_par  = list(size_max = 200, size_min = 1),
+    ## Define the number of cell cycles
+    cycle                = 20,
+    ## Define the efficiency of the cell cycle
+    efficiency           = 0.705,
+    ## Define the error rate of the PCR, mutation per base per cycle
+    error                = 1e-6,
+    ## Define the number of PCR reads per cell (clone_n)
+    pcr_read_per_umi     = 50,
+    ## Define the output prefix
+    output_prefix        = "./tmp/simu_seq",
+    ## Define the NGS profile (refer to ART sequencing simulator manual)
+    ngs_profile          = "MSv1",
+    ## Define the length of the reads
+    reads_length         = 35,
+    ## Define the fixed sequence at the 5' end of the reads to be added
+    top_seq              = "AAAAAAAAAAGGGGG",
+    ## Define the fixed sequence at the 3' end of the reads to be added
+    bottom_seq           = "TTTTTTTTTT",
+    ## Define the length of the fixed sequence to be added
+    sequence_trunk       = 10,
+    ## Define the number of pre-amplification cycles
+    preamp_n             = 5,
+    ## Define the length of the UMI
+    umi_length           = 8,
+    ## Define the UMI tagging efficiency
+    umi_tagging_efficiency = 0.05,
+    ## Use the default ART binary file
+    art_bin              = NULL 
+)
+```
+
+## Example 3: Simulating a barcode library with constant 5 end region
+
+For the non-UMI sequencing simulation, the constant region is added after PCR amplification in the simulating function.
+
+If user wants to simulate a barcode library with constant region added before PCR amplification, the constant region should be constructed during the library simulating stage.
+
+Following is an example of simulating a barcode library with constant 5 end region.
+
+```{r}
+## Simulating a random barcode with log-normal distribution
+## The mean of the lognormal distribution is 0.5 and the standard deviation is 0.1
+temp_dir = tempdir()
+library = simu_barcode_random_lnorm(
+    length = 15,    ## the length of the barcode sequences
+    n = 1e5,        ## the number of barcode sequences
+    log_mean= 0.5,  ## the mean of the lognormal distribution
+    log_sd= 1,    ## the standard deviation of the lognormal distribution
+    top_fix = "AAAAAAATTTTTTT", ## Just for exmaple, the 5 end constant region
+    bottom_fix = "AAAAAAATTTTTTT" ## Just for exmaple, the 3 end constant region
+)
+
+head(library[order(library$freq, decreasing = T), ])
+```
+
+Using the above barcode library in the seqeucning simulation, the constant region will be affected by PCR errors. 
+
 
 # Session Info
 

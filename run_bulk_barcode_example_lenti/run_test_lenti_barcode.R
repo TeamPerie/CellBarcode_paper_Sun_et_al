@@ -43,6 +43,14 @@ f = c("../../data/A1007/sample1_filtered.fastq", "../../data/A1007/sample2_filte
 
 ## Check sequencing quality
 x = bc_seq_qc(f)
+d_rep1 = x@qc_list[[1]]@base_freq_per_cycle
+d_rep2 = x@qc_list[[2]]@base_freq_per_cycle
+d_rep1$sample = "Rep1"
+d_rep2$sample = "Rep2"
+d = rbind(d_rep1, d_rep2)
+write_tsv(d, "./tmp/Figure_4A.tsv")
+write_tsv(d_rep2, "./tmp/Figure_4B.tsv")
+
 bc_plot_seqQc(x)
 pdf("./tmp/fig_bc_seqQc_rep2.pdf", height = 5, width = 7)
 bc_plot_seqQc(x[2])
@@ -93,7 +101,8 @@ ggplot(d_plot_cell_count) + aes(x = sample1_filtered.fastq, y = sample2_filtered
     geom_abline(slope = 1) + geom_vline(xintercept = 1) + geom_hline(yintercept = 1) +
     #     geom_vline(xintercept = 13564 * 0.0001, color = 'blue') + geom_hline(yintercept = 12564 * 0.0001, color = 'blue') +
     theme_bw() + scale_color_manual(values = c("No" = "red", "Yes" = "black"))
-# ggsave("./tmp/fig_clustering_norm.pdf", width = 4, height = 3)
+ggsave("./tmp/Figure_4E.pdf", width = 4, height = 3)
+write_tsv(d_plot_cell_count, "./tmp/Figure_4E.tsv")
 
 
 #' # Without clustering
@@ -120,6 +129,10 @@ ggplot(d_plot_cell_count) + aes(x = sample1_filtered.fastq, y = sample2_filtered
     geom_abline(slope = 1) + geom_vline(xintercept = 1) + geom_hline(yintercept = 1) +
     #     geom_vline(xintercept = 13564 * 0.0001, color = 'blue') + geom_hline(yintercept = 12564 * 0.0001, color = 'blue') +
     theme_bw() + scale_color_manual(values = c("No" = "red", "Yes" = "black"))
+ggsave("./tmp/Figure_4D.pdf", width = 4, height = 3)
+write_tsv(d_plot_cell_count, "./tmp/Figure_4D.tsv")
+
+
 
 
 #' # compare to the reads count in original paper
@@ -160,6 +173,8 @@ g = ggplot(d_plot_compare[sample1_filtered.fastq >= 1 | var.Totalreads.AE3_HIGH_
     geom_abline(slope = 1, color = 'red', alpha = 0.5) +
     theme_bw() + labs(x = "Normalized read count (Eisele et al.)", y = "Normmalized read count (CellBarcode)") + ggpubr::stat_cor(method = "spearman")
 
+ggsave("./tmp/Figure_4C.pdf", g)
+write_tsv(d_plot_compare[sample1_filtered.fastq >= 1 | var.Totalreads.AE3_HIGH_1_M_a > 0], "./tmp/Figure_4C.tsv")
 g
 
 d_plot_compare[sample1_filtered.fastq > 1 & var.Totalreads.AE3_HIGH_1_M_a > 0]
@@ -263,12 +278,42 @@ ggplot(d_merge) + aes(y = count_b, x = count_c) +
 
 #' # Analysis Simulation results
 
-
 f = c("./tmp/lenti_sumu_filtered.fq", "../../data/A1007/sample1_filtered.fastq")
 
-x = bc_seq_qc(f, sample_name = c("sample2", "sample1"))
+x = bc_seq_qc(f, sample_name = c("Simulation", "Experiment"))
 bc_plot_seqQc(x)
 
+## base percentage line plot
+d <- lapply(
+    seq_along(x@qc_list),
+    function(i) {
+        data.table(x@qc_list[[i]]@base_freq_per_cycle, fileName = names(x@qc_list)[i]) 
+    }) %>% rbindlist()
+
+d[, base_num := sum(Count), by = .(Cycle, fileName)]
+d[, base_percent := Count / base_num, by = .(Base, Cycle, fileName)]
+
+d_stat = d[, .(Base = Base[which.max(base_percent)], base_percent = max(base_percent)), by = .(Cycle, fileName)]
+
+m = dcast(d_stat, Cycle ~ fileName, value.var = "base_percent") 
+cor.test(m[[2]], m[[3]])
+
+ggplot(d, aes(Cycle, fileName, fill = Base, alpha = base_percent)) + 
+    geom_tile(color = "black") + labs(y = "Sample Name") + theme_bw()
+
+ggplot(d, aes(x = Cycle, y = base_percent, color = Base)) + 
+    geom_line() + facet_wrap(~fileName, ncol = 1) + theme_classic()
+
+
+# Note. Figure 2B
+ggplot(d, aes(x = Cycle, y = base_percent, fill = Base)) + 
+    geom_bar(stat = "identity") + facet_wrap(~fileName, ncol = 1) + theme_classic()
+    # scale_fill_manual(values = c("#532026FF", "#BA141EFF", "#E2E3E7FF", "#61829CFF"))
+
+write_tsv(d, "./tmp/Figure_2C.tsv")
+ggsave("./tmp/Figure_2C.pdf", width = 5, height = 4)
+
+## test reads count distribution
 bc_obj = bc_extract(f, pattern)
 
 x = bc_meta(bc_obj)
@@ -290,10 +335,6 @@ g_l = lapply(d_l, function(x) {
 })
 
 egg::ggarrange(plots = g_l, nrow = 1)
-
-
-
-
 
 sessionInfo()
 

@@ -81,9 +81,9 @@ symnum.args <- list(cutpoints = c(0, 0.0001, 0.001, 0.01,
 ggplot(d_auc) + aes(x = simu_name, y = aucpr) + geom_boxplot() + theme0 +
     scale_x_discrete(limits = i_level_simu_name) +
     labs(y = "P-R AUC") + lims(y = c(0, 1)) + 
-    stat_compare_means(method = "wilcox.test", na.rm = T, hide.ns = T, symnum.args = symnum.args)
-ggsave("./tmp/fig_aucpr_umi.pdf")
-
+    stat_compare_means(method = "wilcox.test", na.rm = T, hide.ns = F)
+write_tsv(d_auc, "./tmp/Figure_3G.tsv")
+ggsave("./tmp/Figure_3G.pdf")
 
 d = fread('./tmp/table_count_true_barcode_umi.tsv')
 d[simu_id == 6][is_true == 0]

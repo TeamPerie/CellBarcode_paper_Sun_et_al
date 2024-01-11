@@ -92,9 +92,11 @@ d_auc = d_auc[simu_name %in% i_level_simu_name]
 ggplot(d_auc) + aes(x = simu_name, y = aucpr) + geom_boxplot() + theme0 +
     scale_x_discrete(limits = i_level_simu_name) +
     labs(y = "P-R AUC") + lims(y = c(0, NA)) +
-    stat_compare_means(method = "wilcox.test", comparisons = comparisons_l, na.rm = T, hide.ns = T, symnum.args = symnum.args)
+    stat_compare_means(method = "wilcox.test", comparisons = comparisons_l, na.rm = T, hide.ns = N)
 
-ggsave("tmp/fig_aucpr_no_umi_reference.pdf")
+write_tsv(d_auc, "tmp/Figure_3D.tsv")
+ggsave("tmp/Figure_3D.pdf")
+
 
 
 #' # Resolusion index

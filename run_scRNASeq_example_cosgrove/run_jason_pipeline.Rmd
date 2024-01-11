@@ -19,12 +19,18 @@ always_allow_html: yes
 library(knitr)
 library(devtools)
 library(Seurat)
+library(data.table)
+library(ggplot2)
+library(plyr)
+library(magrittr)
+library(readr)
+library(stringr)
 opts_chunk$set(echo=T, TOC=T)
 ```
 
 ```{r}
-# library(CellBarcode)
-load_all("~/projects/Barcode_analysis_package/CellBarcode-master")
+library(CellBarcode)
+# load_all("~/projects/Barcode_analysis_package/CellBarcode-master")
 ```
 
 # Quick check the reads infromation
@@ -104,6 +110,8 @@ ggplot(d_plot2) + aes(x = filtering, y = barcode_per_cell) +
     geom_violin() +
     geom_point(position = position_jitter(w = 0.1, h = 0), alpha = 0.01) + 
     theme_bw() + labs(x = "Unique UMI filter", y = "Barcode per cell") + scale_y_log10()
+write_tsv(d_plot2, "./tmp/Figure_6C.tsv")
+ggsave("./tmp/Figure_6C.pdf")
 
 
 bc_plot_count(bc_obj1, useClean=F)
@@ -125,6 +133,8 @@ ggplot(d_plot) + aes(x = factor(filter), y = N) +
     geom_point(data = d_plot_plus, aes(x = filter, y = (N - a) / b), color = "red") +
     scale_y_continuous( name = 'Barcodes per cell', sec.axis = sec_axis(~ (. * b + a),name = "Cell number"))+
     labs(x = "UMI read count") + theme_bw()
+write_tsv(d_plot, "./tmp/Figure_6D.tsv")
+ggsave("./tmp/Figure_6D.pdf")
 
 bc_obj = bc_cure_umi(bc_obj1, depth = 2, isUniqueUMI = T)
 
@@ -147,5 +157,7 @@ ggplot(d_plot) + aes(x = factor(filter), y = N) +
     geom_point(data = d_plot_plus, aes(x = filter, y = ((N - a) / b)), color = "red") +
     scale_y_continuous(name = 'Barcodes per cell', sec.axis = sec_axis(~ (. * b + a), name = "Cell has \n Unique barcode")) +
     labs(x = "UMI count") + theme_bw()
+write_tsv(d_plot, "./tmp/Figure_6E.tsv")
+ggsave("./tmp/Figure_6E.pdf")
 ```
 
